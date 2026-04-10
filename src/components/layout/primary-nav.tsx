@@ -35,7 +35,7 @@ export function PrimaryNav() {
   const companyId = searchParams.get("company");
 
   return (
-    <nav className="flex flex-wrap items-center gap-2 rounded-full bg-white/90 px-3 py-2.5 shadow-[0_14px_40px_rgba(110,62,36,0.14)]">
+    <nav className="flex w-full flex-wrap items-center justify-center gap-2 rounded-full bg-white/90 px-3 py-2.5 shadow-[0_14px_40px_rgba(110,62,36,0.14)] lg:w-auto lg:justify-start">
       {items.map((item) => {
         const active = pathname.startsWith(item.href);
         const Icon = item.icon;

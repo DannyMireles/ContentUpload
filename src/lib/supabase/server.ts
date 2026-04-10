@@ -1,4 +1,4 @@
-import { createBrowserClient, createServerClient } from "@supabase/ssr";
+import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 
 import { env } from "@/lib/env";
@@ -7,12 +7,6 @@ function assertSupabase() {
   if (!env.SUPABASE_URL || !env.SUPABASE_ANON_KEY) {
     throw new Error("SUPABASE_URL and SUPABASE_ANON_KEY are required.");
   }
-}
-
-export function createSupabaseBrowserClient() {
-  assertSupabase();
-
-  return createBrowserClient(env.SUPABASE_URL!, env.SUPABASE_ANON_KEY!);
 }
 
 export async function createSupabaseServerClient() {

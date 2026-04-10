@@ -1,4 +1,8 @@
+import type { SupabaseClient } from "@supabase/supabase-js";
+
 import { AUTOMATION_MEDIA_BUCKET, createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { decryptSecret, encryptSecret } from "@/lib/security/encryption";
 import type {
   Automation,
   ChannelConnection,
@@ -87,6 +91,34 @@ interface OAuthLinkSessionRow {
   expires_at: string;
 }
 
+interface CompanyOAuthAppRow {
+  id: string;
+  company_id: string;
+  platform: PlatformId;
+  client_id: string;
+  encrypted_client_secret: Record<string, string>;
+}
+
+type ClientOptions = { useAdmin?: boolean };
+
+async function getSupabaseClient(options?: ClientOptions) {
+  if (options?.useAdmin) {
+    return createSupabaseAdminClient();
+  }
+
+  return await createSupabaseServerClient();
+}
+
+async function requireUser(supabase: SupabaseClient) {
+  const { data, error } = await supabase.auth.getUser();
+
+  if (error || !data.user) {
+    throw new Error("Unauthorized.");
+  }
+
+  return data.user;
+}
+
 function companyAccent(id: string) {
   const accents = [
     "from-red-400 to-orange-200",
@@ -146,7 +178,7 @@ function mapChannel(row: ChannelRow): ChannelConnection {
 }
 
 async function getSignedUrlMap(paths: string[]) {
-  const supabase = createSupabaseAdminClient();
+  const supabase = await getSupabaseClient();
   const signedUrls = await Promise.all(
     [...new Set(paths.filter(Boolean))].map(async (path) => {
       const { data } = await supabase.storage
@@ -209,7 +241,7 @@ function mapAutomation(
 }
 
 async function getBaseData() {
-  const supabase = createSupabaseAdminClient();
+  const supabase = await getSupabaseClient();
   const [companiesResult, channelsResult, mediaResult, automationsResult, targetsResult] =
     await Promise.all([
       supabase.from("companies").select("id,name,summary").order("created_at"),
@@ -286,7 +318,7 @@ export async function getAutomationById(id: string) {
 }
 
 export async function getChannels() {
-  const supabase = createSupabaseAdminClient();
+  const supabase = await getSupabaseClient();
   const { data, error } = await supabase
     .from("company_channels")
     .select(
@@ -305,7 +337,8 @@ export async function createCompany(input: {
   name: string;
   summary: string;
 }) {
-  const supabase = createSupabaseAdminClient();
+  const supabase = await getSupabaseClient();
+  const user = await requireUser(supabase);
   const { data, error } = await supabase
     .from("companies")
     .insert({
@@ -319,7 +352,19 @@ export async function createCompany(input: {
     throw error;
   }
 
-  return mapCompany(data as CompanyRow);
+  const company = mapCompany(data as CompanyRow);
+
+  const { error: memberError } = await supabase.from("company_members").insert({
+    company_id: company.id,
+    user_id: user.id,
+    role: "owner"
+  });
+
+  if (memberError) {
+    throw memberError;
+  }
+
+  return company;
 }
 
 export async function updateCompany(input: {
@@ -327,7 +372,7 @@ export async function updateCompany(input: {
   name: string;
   summary: string;
 }) {
-  const supabase = createSupabaseAdminClient();
+  const supabase = await getSupabaseClient();
   const { data, error } = await supabase
     .from("companies")
     .update({
@@ -345,13 +390,91 @@ export async function updateCompany(input: {
   return mapCompany(data as CompanyRow);
 }
 
+export async function deleteCompany(companyId: string) {
+  const supabase = await getSupabaseClient();
+  const { error } = await supabase.from("companies").delete().eq("id", companyId);
+
+  if (error) {
+    throw error;
+  }
+}
+
+export async function getCompanyOAuthApp(input: {
+  companyId: string;
+  platform: PlatformId;
+}) {
+  const supabase = await getSupabaseClient();
+  const { data, error } = await supabase
+    .from("company_oauth_apps")
+    .select("id,company_id,platform,client_id,encrypted_client_secret")
+    .eq("company_id", input.companyId)
+    .eq("platform", input.platform)
+    .maybeSingle();
+
+  if (error) {
+    throw error;
+  }
+
+  if (!data) {
+    return null;
+  }
+
+  const row = data as CompanyOAuthAppRow;
+  return {
+    clientId: row.client_id,
+    clientSecret: decryptSecret(row.encrypted_client_secret)
+  };
+}
+
+export async function upsertCompanyOAuthApp(input: {
+  companyId: string;
+  platform: PlatformId;
+  clientId: string;
+  clientSecret: string;
+}) {
+  const supabase = await getSupabaseClient();
+  const encryptedClientSecret = encryptSecret(input.clientSecret);
+
+  const { error } = await supabase.from("company_oauth_apps").upsert(
+    {
+      company_id: input.companyId,
+      platform: input.platform,
+      client_id: input.clientId,
+      encrypted_client_secret: encryptedClientSecret
+    },
+    {
+      onConflict: "company_id,platform"
+    }
+  );
+
+  if (error) {
+    throw error;
+  }
+}
+
+export async function deleteCompanyOAuthApp(input: {
+  companyId: string;
+  platform: PlatformId;
+}) {
+  const supabase = await getSupabaseClient();
+  const { error } = await supabase
+    .from("company_oauth_apps")
+    .delete()
+    .eq("company_id", input.companyId)
+    .eq("platform", input.platform);
+
+  if (error) {
+    throw error;
+  }
+}
+
 export async function createMediaAsset(input: {
   companyId: string;
   storagePath: string;
   originalFilename: string;
   contentType: string | null;
 }) {
-  const supabase = createSupabaseAdminClient();
+  const supabase = await getSupabaseClient();
   const { data, error } = await supabase
     .from("media_assets")
     .insert({
@@ -373,8 +496,8 @@ export async function createMediaAsset(input: {
   return data as MediaAssetRow;
 }
 
-export async function getMediaAssetById(id: string) {
-  const supabase = createSupabaseAdminClient();
+export async function getMediaAssetById(id: string, options?: ClientOptions) {
+  const supabase = await getSupabaseClient(options);
   const { data, error } = await supabase
     .from("media_assets")
     .select(
@@ -390,11 +513,14 @@ export async function getMediaAssetById(id: string) {
   return (data as MediaAssetRow | null) ?? null;
 }
 
-export async function updateMediaTranscript(input: {
+export async function updateMediaTranscript(
+  input: {
   mediaAssetId: string;
   transcript: string;
-}) {
-  const supabase = createSupabaseAdminClient();
+  },
+  options?: ClientOptions
+) {
+  const supabase = await getSupabaseClient(options);
   const { error } = await supabase
     .from("media_assets")
     .update({
@@ -408,8 +534,12 @@ export async function updateMediaTranscript(input: {
   }
 }
 
-export async function markMediaTranscriptFailed(mediaAssetId: string, message: string) {
-  const supabase = createSupabaseAdminClient();
+export async function markMediaTranscriptFailed(
+  mediaAssetId: string,
+  message: string,
+  options?: ClientOptions
+) {
+  const supabase = await getSupabaseClient(options);
   const { error } = await supabase
     .from("media_assets")
     .update({
@@ -428,7 +558,7 @@ export async function createAutomationWithTargets(input: {
   mediaAssetId: string;
   plans: PlatformPlan[];
 }) {
-  const supabase = createSupabaseAdminClient();
+  const supabase = await getSupabaseClient();
   const { data: automation, error } = await supabase
     .from("automations")
     .insert({
@@ -473,7 +603,7 @@ export async function replaceAutomationTargets(input: {
   automationId: string;
   plans: PlatformPlan[];
 }) {
-  const supabase = createSupabaseAdminClient();
+  const supabase = await getSupabaseClient();
   const { error: deleteError } = await supabase
     .from("automation_targets")
     .delete()
@@ -507,15 +637,18 @@ export async function replaceAutomationTargets(input: {
   }
 }
 
-export async function updateAutomationTargetSeo(input: {
+export async function updateAutomationTargetSeo(
+  input: {
   automationId: string;
   platform: PlatformId;
   title: string;
   caption: string;
   description: string;
   generatedPayload: Record<string, unknown>;
-}) {
-  const supabase = createSupabaseAdminClient();
+  },
+  options?: ClientOptions
+) {
+  const supabase = await getSupabaseClient(options);
   const { error } = await supabase
     .from("automation_targets")
     .update({
@@ -533,7 +666,7 @@ export async function updateAutomationTargetSeo(input: {
 }
 
 export async function updateAutomationStatus(automationId: string, status: string) {
-  const supabase = createSupabaseAdminClient();
+  const supabase = await getSupabaseClient();
   const { error } = await supabase
     .from("automations")
     .update({
@@ -550,7 +683,7 @@ export async function updateAutomationMediaAsset(input: {
   automationId: string;
   mediaAssetId: string;
 }) {
-  const supabase = createSupabaseAdminClient();
+  const supabase = await getSupabaseClient();
   const { error } = await supabase
     .from("automations")
     .update({
@@ -564,7 +697,7 @@ export async function updateAutomationMediaAsset(input: {
 }
 
 export async function deleteAutomation(automationId: string) {
-  const supabase = createSupabaseAdminClient();
+  const supabase = await getSupabaseClient();
   const { error: targetError } = await supabase
     .from("automation_targets")
     .delete()
@@ -592,7 +725,7 @@ export async function saveOAuthLinkState(input: {
   returnTo: string;
   expiresAt: string;
 }) {
-  const supabase = createSupabaseAdminClient();
+  const supabase = await getSupabaseClient();
   const { error } = await supabase.from("oauth_link_states").insert({
     id: input.id,
     company_id: input.companyId,
@@ -608,7 +741,7 @@ export async function saveOAuthLinkState(input: {
 }
 
 export async function consumeOAuthLinkState(id: string) {
-  const supabase = createSupabaseAdminClient();
+  const supabase = await getSupabaseClient();
   const { data, error } = await supabase
     .from("oauth_link_states")
     .select("id,company_id,platform,code_verifier,return_to,expires_at")
@@ -640,7 +773,7 @@ export async function createPendingOAuthLinkSession(input: {
   returnTo: string;
   expiresAt: string;
 }) {
-  const supabase = createSupabaseAdminClient();
+  const supabase = await getSupabaseClient();
   const { error } = await supabase.from("oauth_link_sessions").insert({
     id: input.id,
     company_id: input.companyId,
@@ -661,7 +794,7 @@ export async function createPendingOAuthLinkSession(input: {
 }
 
 export async function getPendingOAuthLinkSession(id: string) {
-  const supabase = createSupabaseAdminClient();
+  const supabase = await getSupabaseClient();
   const { data, error } = await supabase
     .from("oauth_link_sessions")
     .select(
@@ -678,7 +811,7 @@ export async function getPendingOAuthLinkSession(id: string) {
 }
 
 export async function deletePendingOAuthLinkSession(id: string) {
-  const supabase = createSupabaseAdminClient();
+  const supabase = await getSupabaseClient();
   const { error } = await supabase.from("oauth_link_sessions").delete().eq("id", id);
 
   if (error) {
@@ -715,7 +848,7 @@ export async function upsertCompanyChannelLink(input: {
   tokenExpiresAt: string | null;
   scopeSummary: string | null;
 }) {
-  const supabase = createSupabaseAdminClient();
+  const supabase = await getSupabaseClient();
   const { error } = await supabase.from("company_channels").upsert(
     {
       company_id: input.companyId,
@@ -744,7 +877,7 @@ export async function disconnectCompanyChannel(input: {
   companyId: string;
   platform: PlatformId;
 }) {
-  const supabase = createSupabaseAdminClient();
+  const supabase = await getSupabaseClient();
   const { error } = await supabase
     .from("company_channels")
     .update({

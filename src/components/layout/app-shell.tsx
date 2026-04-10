@@ -11,7 +11,7 @@ interface AppShellProps {
 export function AppShell({ companies, channels, children }: AppShellProps) {
   return (
     <div className="mx-auto flex min-h-screen max-w-7xl flex-col gap-6 px-4 py-6 sm:px-6 lg:px-8">
-      <header className="controller sticky top-6 z-20 flex flex-wrap items-center justify-between gap-4 rounded-[2.75rem] px-7 py-5 backdrop-blur">
+      <header className="controller sticky top-6 z-20 flex flex-col gap-4 rounded-[2.75rem] px-6 py-5 backdrop-blur lg:flex-row lg:items-center lg:justify-between">
         <div className="flex items-center gap-4">
           <div className="relative flex h-14 w-14 items-center justify-center rounded-[1.6rem] bg-white text-lg font-semibold text-rose-700 shadow-[0_12px_28px_rgba(207,112,78,0.22)]">
             <span className="absolute inset-0 rounded-[1.6rem] border border-rose-200/70" />
@@ -25,9 +25,11 @@ export function AppShell({ companies, channels, children }: AppShellProps) {
           </div>
         </div>
 
-        <PrimaryNav />
+        <div className="w-full lg:w-auto">
+          <PrimaryNav />
+        </div>
 
-        <div className="flex flex-wrap items-center gap-3">
+        <div className="flex w-full flex-wrap items-center gap-3 lg:w-auto lg:justify-end">
           {companies.length > 0 ? <CompanySwitcher companies={companies} /> : null}
         </div>
       </header>

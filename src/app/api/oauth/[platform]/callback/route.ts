@@ -7,7 +7,11 @@ import {
   upsertCompanyChannelLink
 } from "@/lib/data/repository";
 import { encryptSecret } from "@/lib/security/encryption";
-import { getProviderConfig, ensureProviderConfigured } from "@/lib/oauth/providers";
+import {
+  ensureProviderConfigured,
+  getProviderConfigForCompany,
+  type OAuthProviderConfig
+} from "@/lib/oauth/providers";
 import { isPlatformId } from "@/lib/oauth/policy";
 import type { OAuthChannelCandidate, PlatformId } from "@/lib/types";
 
@@ -61,12 +65,12 @@ export async function GET(
     );
   }
 
-  const provider = getProviderConfig(platform);
+  const provider = await getProviderConfigForCompany(platform, linkState.company_id);
 
   if (!ensureProviderConfigured(provider)) {
     return NextResponse.redirect(
       buildReturnUrl(request, linkState.return_to, {
-        notice: `${platformLabel(platform)} OAuth cannot complete because provider credentials are missing.`
+        notice: `${platformLabel(platform)} OAuth cannot complete because no client ID/secret is configured for this company.`
       })
     );
   }
@@ -155,7 +159,7 @@ export async function GET(
 
 async function exchangeToken(
   platform: PlatformId,
-  provider: ReturnType<typeof getProviderConfig>,
+  provider: OAuthProviderConfig,
   input: { code: string; codeVerifier: string; redirectUri: string }
 ) {
   const body = new URLSearchParams();

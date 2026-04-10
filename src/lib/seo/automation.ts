@@ -19,7 +19,7 @@ export async function runAutomationSeoPipeline(input: {
     return;
   }
 
-  const mediaAsset = await getMediaAssetById(input.mediaAssetId);
+  const mediaAsset = await getMediaAssetById(input.mediaAssetId, { useAdmin: true });
 
   if (!mediaAsset) {
     throw new Error("Media asset not found for AI SEO pipeline.");
@@ -42,30 +42,37 @@ export async function runAutomationSeoPipeline(input: {
       buffer
     });
 
-    await updateMediaTranscript({
-      mediaAssetId: mediaAsset.id,
-      transcript
-    });
+    await updateMediaTranscript(
+      {
+        mediaAssetId: mediaAsset.id,
+        transcript
+      },
+      { useAdmin: true }
+    );
 
     for (const plan of aiPlans) {
       const seo = await generateSeoFromTranscript(plan.platform, transcript);
-      await updateAutomationTargetSeo({
-        automationId: input.automationId,
-        platform: plan.platform,
-        title: seo.title,
-        caption: seo.caption,
-        description: seo.description,
-        generatedPayload: {
-          summary: seo.caption.slice(0, 160),
-          transcriptExcerpt: transcript.slice(0, 800),
-          hashtags: seo.hashtags
-        }
-      });
+      await updateAutomationTargetSeo(
+        {
+          automationId: input.automationId,
+          platform: plan.platform,
+          title: seo.title,
+          caption: seo.caption,
+          description: seo.description,
+          generatedPayload: {
+            summary: seo.caption.slice(0, 160),
+            transcriptExcerpt: transcript.slice(0, 800),
+            hashtags: seo.hashtags
+          }
+        },
+        { useAdmin: true }
+      );
     }
   } catch (error) {
     await markMediaTranscriptFailed(
       mediaAsset.id,
-      error instanceof Error ? error.message : "Transcription failed."
+      error instanceof Error ? error.message : "Transcription failed.",
+      { useAdmin: true }
     );
     throw error;
   }

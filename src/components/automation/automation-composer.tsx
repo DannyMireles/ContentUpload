@@ -259,7 +259,7 @@ export function AutomationComposer({
       <section className="space-y-4">
         <div className="panel rounded-[2rem] p-5">
           <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
-            <div>
+            <div className="min-w-0">
               <div className="text-xs uppercase tracking-[0.24em] text-rose-900/55">
                 {mode === "create" ? "Composer" : "Edit automation"}
               </div>
@@ -278,7 +278,9 @@ export function AutomationComposer({
             {company ? (
               <div className="mb-4 flex flex-wrap items-center gap-3 text-sm text-rose-900/70">
                 <span className="text-xs uppercase tracking-[0.22em] text-rose-900/55">Company</span>
-                <span className="font-medium text-rose-950">{company.name}</span>
+                <span className="max-w-[240px] truncate font-medium text-rose-950" title={company.name}>
+                  {company.name}
+                </span>
                 <span className="text-rose-900/60">Connected channels: {availableChannels.length}</span>
                 <Link
                   href={settingsHref}
@@ -347,7 +349,7 @@ export function AutomationComposer({
             <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
               <div>
                 <div className="text-xs uppercase tracking-[0.24em] text-rose-900/55">OAuth requirement</div>
-                <div className="mt-3 text-lg text-rose-950">
+                <div className="mt-3 break-words text-lg text-rose-950">
                   {company?.name ?? "Selected company"} currently has {availableChannels.length} publishable channel{availableChannels.length === 1 ? "" : "s"}.
                 </div>
                 <div className="mt-2 text-sm leading-6 text-rose-900/70">
@@ -412,7 +414,7 @@ export function AutomationComposer({
                       {plan.seoMode === "ai" ? "AI SEO" : "Manual copy"}
                     </span>
                   </div>
-                  <div className="mt-3 flex items-center gap-2 text-sm text-rose-900/70">
+                  <div className="mt-3 flex items-center gap-2 text-sm text-rose-900/70 break-words">
                     <Clock3 className="h-4 w-4" />
                     {plan.scheduledFor || "Choose a post time"}
                   </div>
@@ -451,7 +453,7 @@ export function AutomationComposer({
 
           {statusMessage ? (
             <div className={cn(
-              "mt-5 rounded-3xl px-4 py-3 text-sm",
+              "mt-5 rounded-3xl px-4 py-3 text-sm break-words",
               statusMessage.toLowerCase().includes("scheduled") || statusMessage.toLowerCase().includes("updated")
                 ? "border border-emerald-200/70 bg-emerald-100/70 text-emerald-900"
                 : "border border-amber-200/60 bg-amber-100/70 text-amber-900"

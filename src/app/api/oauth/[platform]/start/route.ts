@@ -3,7 +3,11 @@ import { NextResponse } from "next/server";
 
 import { saveOAuthLinkState } from "@/lib/data/repository";
 import { createCodeChallenge, createCodeVerifier } from "@/lib/oauth/pkce";
-import { getProviderConfig, ensureProviderConfigured } from "@/lib/oauth/providers";
+import {
+  ensureProviderConfigured,
+  getProviderConfigForCompany,
+  type OAuthProviderConfig
+} from "@/lib/oauth/providers";
 import { isPlatformId } from "@/lib/oauth/policy";
 import type { PlatformId } from "@/lib/types";
 
@@ -25,12 +29,12 @@ export async function GET(
     );
   }
 
-  const provider = getProviderConfig(platform);
+  const provider = await getProviderConfigForCompany(platform, companyId);
 
   if (!ensureProviderConfigured(provider)) {
     return NextResponse.redirect(
       buildReturnUrl(request, safeReturnTo, {
-        notice: `${platformLabel(platform)} OAuth cannot start yet because the provider app credentials are not configured server-side.`
+        notice: `${platformLabel(platform)} OAuth cannot start yet because no client ID/secret is configured for this company.`
       })
     );
   }
@@ -60,7 +64,7 @@ export async function GET(
 
 function buildAuthUrl(
   platform: PlatformId,
-  provider: ReturnType<typeof getProviderConfig>,
+  provider: OAuthProviderConfig,
   input: { redirectUri: string; state: string; codeChallenge: string }
 ) {
   const authUrl = new URL(provider.authUrl);

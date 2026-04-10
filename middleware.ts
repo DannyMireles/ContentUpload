@@ -1,44 +1,105 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
+import { createServerClient } from "@supabase/ssr";
 
-import { SESSION_COOKIE } from "@/lib/auth/session";
-import { verifySessionToken } from "@/lib/auth/token";
+import { env } from "@/lib/env";
 
-const PUBLIC_PATHS = ["/login"];
-const PUBLIC_API_PREFIXES = ["/api/auth", "/api/cron", "/api/oauth"];
+const PUBLIC_PATHS = ["/login", "/signup", "/verify", "/forgot", "/pending"];
+const ONBOARDING_PREFIX = "/onboarding";
+const PUBLIC_API_PREFIXES = ["/api/auth", "/api/cron"];
+
+function isStaticAsset(pathname: string) {
+  return (
+    pathname.startsWith("/_next") ||
+    pathname.startsWith("/favicon") ||
+    pathname.includes(".")
+  );
+}
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  if (
-    pathname.startsWith("/_next") ||
-    pathname.startsWith("/favicon") ||
-    pathname.includes(".")
-  ) {
+  if (isStaticAsset(pathname)) {
     return NextResponse.next();
+  }
+
+  const response = NextResponse.next();
+
+  const supabase = createServerClient(env.SUPABASE_URL!, env.SUPABASE_ANON_KEY!, {
+    cookies: {
+      get(name) {
+        return request.cookies.get(name)?.value;
+      },
+      set(name, value, options) {
+        response.cookies.set({ name, value, ...options });
+      },
+      remove(name, options) {
+        response.cookies.set({ name, value: "", ...options, maxAge: 0 });
+      }
+    }
+  });
+
+  const { data } = await supabase.auth.getUser();
+  const user = data.user;
+
+  if (PUBLIC_API_PREFIXES.some((prefix) => pathname.startsWith(prefix))) {
+    return response;
   }
 
   const isPublicPath = PUBLIC_PATHS.includes(pathname);
-  const isPublicApi = PUBLIC_API_PREFIXES.some((prefix) => pathname.startsWith(prefix));
-  const authenticated = await verifySessionToken(request.cookies.get(SESSION_COOKIE)?.value);
+  const isOnboarding = pathname.startsWith(ONBOARDING_PREFIX);
+  const isApi = pathname.startsWith("/api");
 
-  if ((pathname === "/" || pathname.startsWith("/scheduled") || pathname.startsWith("/automations") || pathname.startsWith("/companies")) && !authenticated) {
-    return NextResponse.redirect(new URL("/login", request.url));
+  if (!user) {
+    if (isApi) {
+      return NextResponse.json({ message: "Unauthorized." }, { status: 401 });
+    }
+
+    if (!isPublicPath) {
+      return NextResponse.redirect(new URL("/login", request.url));
+    }
+
+    return response;
   }
 
-  if (isPublicApi) {
-    return NextResponse.next();
+  const { data: profile, error } = await supabase
+    .from("user_profiles")
+    .select("approved,onboarding_complete")
+    .eq("user_id", user.id)
+    .maybeSingle();
+
+  if (!profile && !error) {
+    await supabase.from("user_profiles").insert({
+      user_id: user.id,
+      email: user.email ?? ""
+    });
   }
 
-  if (pathname === "/login" && authenticated) {
+  const effectiveProfile = profile ?? { approved: false, onboarding_complete: false };
+
+  if (!effectiveProfile.approved) {
+    if (isApi) {
+      return NextResponse.json({ message: "Account pending approval." }, { status: 403 });
+    }
+
+    if (pathname !== "/pending") {
+      return NextResponse.redirect(new URL("/pending", request.url));
+    }
+    return response;
+  }
+
+  if (!effectiveProfile.onboarding_complete && !isOnboarding) {
+    if (isApi) {
+      return NextResponse.json({ message: "Onboarding incomplete." }, { status: 403 });
+    }
+    return NextResponse.redirect(new URL("/onboarding", request.url));
+  }
+
+  if (isPublicPath || (isOnboarding && effectiveProfile.onboarding_complete)) {
     return NextResponse.redirect(new URL("/scheduled", request.url));
   }
 
-  if (!isPublicPath && !authenticated && pathname !== "/") {
-    return NextResponse.redirect(new URL("/login", request.url));
-  }
-
-  return NextResponse.next();
+  return response;
 }
 
 export const config = {

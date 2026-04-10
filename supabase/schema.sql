@@ -39,6 +39,15 @@ create table if not exists company_members (
   primary key (company_id, user_id)
 );
 
+create table if not exists user_profiles (
+  user_id uuid primary key references auth.users(id) on delete cascade,
+  email text not null default '',
+  approved boolean not null default false,
+  onboarding_complete boolean not null default false,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
 create table if not exists company_channels (
   id uuid primary key default gen_random_uuid(),
   company_id uuid not null references companies(id) on delete cascade,
@@ -83,6 +92,17 @@ create table if not exists oauth_link_sessions (
   return_to text not null default '/settings',
   expires_at timestamptz not null,
   created_at timestamptz not null default now()
+);
+
+create table if not exists company_oauth_apps (
+  id uuid primary key default gen_random_uuid(),
+  company_id uuid not null references companies(id) on delete cascade,
+  platform text not null check (platform in ('tiktok', 'instagram', 'youtube')),
+  client_id text not null,
+  encrypted_client_secret jsonb not null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (company_id, platform)
 );
 
 create table if not exists media_assets (
@@ -144,8 +164,18 @@ create trigger handle_media_assets_updated_at
   for each row
   execute function public.set_updated_at();
 
+create trigger handle_user_profiles_updated_at
+  before update on user_profiles
+  for each row
+  execute function public.set_updated_at();
+
 create trigger handle_automations_updated_at
   before update on automations
+  for each row
+  execute function public.set_updated_at();
+
+create trigger handle_company_oauth_apps_updated_at
+  before update on company_oauth_apps
   for each row
   execute function public.set_updated_at();
 
@@ -156,22 +186,92 @@ create trigger handle_automation_targets_updated_at
 
 alter table companies enable row level security;
 alter table company_members enable row level security;
+alter table user_profiles enable row level security;
 alter table company_channels enable row level security;
 alter table media_assets enable row level security;
 alter table automations enable row level security;
 alter table automation_targets enable row level security;
 alter table oauth_link_states enable row level security;
 alter table oauth_link_sessions enable row level security;
+alter table company_oauth_apps enable row level security;
 
 create policy "company members can read companies"
   on companies
   for select
   using (public.is_company_member(id));
 
+create policy "authenticated users can create companies"
+  on companies
+  for insert
+  with check (auth.role() = 'authenticated');
+
+create policy "owners can update companies"
+  on companies
+  for update
+  using (
+    exists (
+      select 1
+      from company_members
+      where company_members.company_id = companies.id
+        and company_members.user_id = auth.uid()
+        and company_members.role = 'owner'
+    )
+  )
+  with check (
+    exists (
+      select 1
+      from company_members
+      where company_members.company_id = companies.id
+        and company_members.user_id = auth.uid()
+        and company_members.role = 'owner'
+    )
+  );
+
+create policy "owners can delete companies"
+  on companies
+  for delete
+  using (
+    exists (
+      select 1
+      from company_members
+      where company_members.company_id = companies.id
+        and company_members.user_id = auth.uid()
+        and company_members.role = 'owner'
+    )
+  );
+
 create policy "company members can read memberships"
   on company_members
   for select
   using (public.is_company_member(company_id));
+
+create policy "members can insert their own membership"
+  on company_members
+  for insert
+  with check (user_id = auth.uid());
+
+create policy "users can read own profile"
+  on user_profiles
+  for select
+  using (auth.uid() = user_id);
+
+create policy "users can insert own profile"
+  on user_profiles
+  for insert
+  with check (auth.uid() = user_id);
+
+create policy "users can update own profile"
+  on user_profiles
+  for update
+  using (auth.uid() = user_id)
+  with check (
+    auth.uid() = user_id
+    and approved = (
+      select user_profiles.approved
+      from user_profiles
+      where user_profiles.user_id = auth.uid()
+    )
+  );
 
 create policy "company members can manage channels"
   on company_channels
@@ -210,3 +310,21 @@ create policy "company members can manage automation targets"
         and public.is_company_member(automations.company_id)
     )
   );
+
+create policy "company members can manage oauth link states"
+  on oauth_link_states
+  for all
+  using (public.is_company_member(company_id))
+  with check (public.is_company_member(company_id));
+
+create policy "company members can manage oauth link sessions"
+  on oauth_link_sessions
+  for all
+  using (public.is_company_member(company_id))
+  with check (public.is_company_member(company_id));
+
+create policy "company members can manage oauth apps"
+  on company_oauth_apps
+  for all
+  using (public.is_company_member(company_id))
+  with check (public.is_company_member(company_id));

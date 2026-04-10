@@ -1,4 +1,5 @@
 import { env } from "@/lib/env";
+import { getCompanyOAuthApp } from "@/lib/data/repository";
 import type { PlatformId } from "@/lib/types";
 
 export interface OAuthProviderConfig {
@@ -43,6 +44,24 @@ export function getProviderConfig(platform: PlatformId): OAuthProviderConfig {
         clientSecret: env.YOUTUBE_CLIENT_SECRET ?? ""
       };
   }
+}
+
+export async function getProviderConfigForCompany(
+  platform: PlatformId,
+  companyId: string
+): Promise<OAuthProviderConfig> {
+  const baseConfig = getProviderConfig(platform);
+  const companyApp = await getCompanyOAuthApp({ companyId, platform });
+
+  if (!companyApp) {
+    return baseConfig;
+  }
+
+  return {
+    ...baseConfig,
+    clientId: companyApp.clientId,
+    clientSecret: companyApp.clientSecret
+  };
 }
 
 export function ensureProviderConfigured(config: OAuthProviderConfig) {

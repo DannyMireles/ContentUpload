@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { AlertTriangle, Pencil, Plus, Sparkles, Unplug, X } from "lucide-react";
+import { AlertTriangle, Pencil, Plus, Sparkles, Trash2, Unplug, X } from "lucide-react";
 
 import { PageHeader } from "@/components/ui/page-header";
 import { StatusPill } from "@/components/ui/status-pill";
@@ -16,6 +16,13 @@ interface CompanyGridProps {
 }
 
 const platforms: PlatformId[] = ["tiktok", "instagram", "youtube"];
+type OAuthAppState = Record<PlatformId, { clientId: string; clientSecret: string }>;
+
+const emptyOAuthApps = (): OAuthAppState => ({
+  tiktok: { clientId: "", clientSecret: "" },
+  instagram: { clientId: "", clientSecret: "" },
+  youtube: { clientId: "", clientSecret: "" }
+});
 
 export function CompanyGrid({ companies, channels }: CompanyGridProps) {
   const router = useRouter();
@@ -24,8 +31,14 @@ export function CompanyGrid({ companies, channels }: CompanyGridProps) {
   const [isPending, startTransition] = useTransition();
   const [newCompanyName, setNewCompanyName] = useState("");
   const [newCompanySummary, setNewCompanySummary] = useState("");
+  const [newCompanyOAuthApps, setNewCompanyOAuthApps] = useState<OAuthAppState>(() =>
+    emptyOAuthApps()
+  );
   const [editCompanyName, setEditCompanyName] = useState("");
   const [editCompanySummary, setEditCompanySummary] = useState("");
+  const [editCompanyOAuthApps, setEditCompanyOAuthApps] = useState<OAuthAppState>(() =>
+    emptyOAuthApps()
+  );
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [isEditOpen, setIsEditOpen] = useState(false);
 
@@ -36,12 +49,34 @@ export function CompanyGrid({ companies, channels }: CompanyGridProps) {
     if (!selectedCompany) {
       setEditCompanyName("");
       setEditCompanySummary("");
+      setEditCompanyOAuthApps(emptyOAuthApps());
       return;
     }
 
     setEditCompanyName(selectedCompany.name);
     setEditCompanySummary(selectedCompany.summary);
+    setEditCompanyOAuthApps(emptyOAuthApps());
   }, [selectedCompany]);
+
+  function collectOAuthApps(input: OAuthAppState) {
+    const payload: Record<PlatformId, { clientId: string; clientSecret: string }> = {};
+    const incomplete: PlatformId[] = [];
+
+    platforms.forEach((platform) => {
+      const clientId = input[platform].clientId.trim();
+      const clientSecret = input[platform].clientSecret.trim();
+      if (!clientId && !clientSecret) {
+        return;
+      }
+      if (!clientId || !clientSecret) {
+        incomplete.push(platform);
+        return;
+      }
+      payload[platform] = { clientId, clientSecret };
+    });
+
+    return { payload, incomplete };
+  }
 
   async function handleDisconnect(platform: PlatformId) {
     if (!selectedCompanyId) {
@@ -77,6 +112,16 @@ export function CompanyGrid({ companies, channels }: CompanyGridProps) {
       return;
     }
 
+    const { payload, incomplete } = collectOAuthApps(editCompanyOAuthApps);
+    if (incomplete.length > 0) {
+      setNotice(
+        `Provide both client ID and secret for: ${incomplete
+          .map((platform) => platformMeta[platform].label)
+          .join(", ")}.`
+      );
+      return;
+    }
+
     startTransition(async () => {
       const response = await fetch(`/api/companies/${selectedCompany.id}`, {
         method: "PATCH",
@@ -85,7 +130,8 @@ export function CompanyGrid({ companies, channels }: CompanyGridProps) {
         },
         body: JSON.stringify({
           name: editCompanyName.trim(),
-          summary: editCompanySummary.trim()
+          summary: editCompanySummary.trim(),
+          oauthApps: Object.keys(payload).length > 0 ? payload : undefined
         })
       });
 
@@ -97,6 +143,34 @@ export function CompanyGrid({ companies, channels }: CompanyGridProps) {
 
       setNotice("Company updated.");
       setIsEditOpen(false);
+      setEditCompanyOAuthApps(emptyOAuthApps());
+      router.refresh();
+    });
+  }
+
+  async function handleDeleteCompany() {
+    if (!selectedCompany) {
+      return;
+    }
+
+    if (!window.confirm(`Delete ${selectedCompany.name}? This removes all linked channels and scheduled automations.`)) {
+      return;
+    }
+
+    startTransition(async () => {
+      const response = await fetch(`/api/companies/${selectedCompany.id}`, {
+        method: "DELETE"
+      });
+
+      const data = (await response.json()) as { message?: string };
+      if (!response.ok) {
+        setNotice(data.message ?? "Failed to delete company.");
+        return;
+      }
+
+      setNotice("Company deleted.");
+      setIsEditOpen(false);
+      setSelectedCompanyId(companies[0]?.id ?? "");
       router.refresh();
     });
   }
@@ -104,6 +178,16 @@ export function CompanyGrid({ companies, channels }: CompanyGridProps) {
   async function handleCreateCompany() {
     if (!newCompanyName.trim()) {
       setNotice("Company name is required.");
+      return;
+    }
+
+    const { payload, incomplete } = collectOAuthApps(newCompanyOAuthApps);
+    if (incomplete.length > 0) {
+      setNotice(
+        `Provide both client ID and secret for: ${incomplete
+          .map((platform) => platformMeta[platform].label)
+          .join(", ")}.`
+      );
       return;
     }
 
@@ -115,7 +199,8 @@ export function CompanyGrid({ companies, channels }: CompanyGridProps) {
         },
         body: JSON.stringify({
           name: newCompanyName.trim(),
-          summary: newCompanySummary.trim()
+          summary: newCompanySummary.trim(),
+          oauthApps: Object.keys(payload).length > 0 ? payload : undefined
         })
       });
 
@@ -127,6 +212,7 @@ export function CompanyGrid({ companies, channels }: CompanyGridProps) {
 
       setNewCompanyName("");
       setNewCompanySummary("");
+      setNewCompanyOAuthApps(emptyOAuthApps());
       setNotice("Company created.");
       setIsCreateOpen(false);
 
@@ -195,9 +281,11 @@ export function CompanyGrid({ companies, channels }: CompanyGridProps) {
                     : "border-white/60 bg-white/60 text-rose-900/70 hover:bg-white"
                 }`}
               >
-                <div>
-                  <div className="font-medium">{company.name}</div>
-                  <div className="text-xs text-rose-900/60">{company.summary}</div>
+                <div className="min-w-0">
+                  <div className="truncate font-medium" title={company.name}>{company.name}</div>
+                  <div className="truncate text-xs text-rose-900/60" title={company.summary}>
+                    {company.summary}
+                  </div>
                 </div>
                 <div className={`h-2 w-2 rounded-full bg-gradient-to-r ${company.accent}`} />
               </button>
@@ -214,10 +302,10 @@ export function CompanyGrid({ companies, channels }: CompanyGridProps) {
           <div className="panel rounded-[2rem] p-5">
             <div className={`h-1.5 rounded-full bg-gradient-to-r ${selectedCompany?.accent ?? "from-rose-300 to-rose-200"}`} />
             <div className="mt-4">
-              <h3 className="text-2xl text-rose-950">
+              <h3 className="break-words text-2xl text-rose-950">
                 {selectedCompany?.name ?? "Select a company"}
               </h3>
-              <p className="mt-2 text-sm text-rose-900/70">
+              <p className="mt-2 break-words text-sm text-rose-900/70">
                 {selectedCompany?.summary ?? "Pick a company to review its channel connections."}
               </p>
             </div>
@@ -232,13 +320,16 @@ export function CompanyGrid({ companies, channels }: CompanyGridProps) {
               return (
                 <div key={platform} className="panel rounded-[1.75rem] p-5">
                   <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-                    <div className="flex items-center gap-3">
+                    <div className="flex min-w-0 items-center gap-3">
                       <div className="rounded-2xl bg-white/80 p-3 text-rose-700">
                         <Icon className="h-4 w-4" />
                       </div>
-                      <div>
+                      <div className="min-w-0">
                         <div className="font-medium text-rose-950">{meta.label}</div>
-                        <div className="text-sm text-rose-900/70">
+                        <div
+                          className="max-w-[220px] truncate text-sm text-rose-900/70"
+                          title={channel?.handle ?? "No linked account"}
+                        >
                           {channel?.handle ?? "No linked account"}
                         </div>
                       </div>
@@ -295,7 +386,7 @@ export function CompanyGrid({ companies, channels }: CompanyGridProps) {
 
       {isCreateOpen ? (
         <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40 p-4 backdrop-blur">
-          <div className="panel w-full max-w-xl rounded-[2rem] p-6">
+          <div className="panel max-h-[90vh] w-full max-w-xl overflow-y-auto rounded-[2rem] p-6">
             <div className="flex items-center justify-between">
               <div>
                 <div className="text-xs uppercase tracking-[0.24em] text-rose-900/55">Create company</div>
@@ -328,6 +419,66 @@ export function CompanyGrid({ companies, channels }: CompanyGridProps) {
                   placeholder="Short description for this brand."
                 />
               </label>
+              <div className="rounded-[1.5rem] border border-rose-200/60 bg-white/70 p-4">
+                <div className="text-xs uppercase tracking-[0.24em] text-rose-900/55">
+                  OAuth app credentials (optional)
+                </div>
+                <p className="mt-2 text-xs text-rose-900/60">
+                  Provide each platform&apos;s client ID and client secret to enable OAuth linking.
+                  These values are encrypted server-side and never exposed in the browser after save.
+                </p>
+                <div className="mt-4 grid gap-4">
+                  {platforms.map((platform) => {
+                    const meta = platformMeta[platform];
+                    const Icon = meta.icon;
+
+                    return (
+                      <div
+                        key={platform}
+                        className="rounded-2xl border border-rose-200/50 bg-white/60 p-3"
+                      >
+                        <div className="flex items-center gap-2 text-sm text-rose-900/80">
+                          <div className="rounded-xl bg-white/80 p-2 text-rose-700">
+                            <Icon className="h-4 w-4" />
+                          </div>
+                          <div className="font-medium">{meta.label}</div>
+                        </div>
+                        <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                          <input
+                            value={newCompanyOAuthApps[platform].clientId}
+                            onChange={(event) =>
+                              setNewCompanyOAuthApps((prev) => ({
+                                ...prev,
+                                [platform]: {
+                                  ...prev[platform],
+                                  clientId: event.target.value
+                                }
+                              }))
+                            }
+                            className="w-full min-w-0 rounded-2xl border border-rose-200/60 bg-white/80 px-4 py-3 text-xs text-rose-900 outline-none transition focus:border-rose-300"
+                            placeholder="Client ID"
+                          />
+                          <input
+                            type="password"
+                            value={newCompanyOAuthApps[platform].clientSecret}
+                            onChange={(event) =>
+                              setNewCompanyOAuthApps((prev) => ({
+                                ...prev,
+                                [platform]: {
+                                  ...prev[platform],
+                                  clientSecret: event.target.value
+                                }
+                              }))
+                            }
+                            className="w-full min-w-0 rounded-2xl border border-rose-200/60 bg-white/80 px-4 py-3 text-xs text-rose-900 outline-none transition focus:border-rose-300"
+                            placeholder="Client secret"
+                          />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
               <div className="flex flex-wrap gap-3">
                 <button
                   type="button"
@@ -352,7 +503,7 @@ export function CompanyGrid({ companies, channels }: CompanyGridProps) {
 
       {isEditOpen ? (
         <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40 p-4 backdrop-blur">
-          <div className="panel w-full max-w-xl rounded-[2rem] p-6">
+          <div className="panel max-h-[90vh] w-full max-w-xl overflow-y-auto rounded-[2rem] p-6">
             <div className="flex items-center justify-between">
               <div>
                 <div className="text-xs uppercase tracking-[0.24em] text-rose-900/55">Edit company</div>
@@ -376,14 +527,74 @@ export function CompanyGrid({ companies, channels }: CompanyGridProps) {
                     className="rounded-2xl border border-rose-200/60 bg-white/80 px-4 py-3 text-sm text-rose-900 outline-none transition focus:border-rose-300"
                   />
                 </label>
-                <label className="grid gap-2 text-sm text-rose-900/70">
-                  Summary
-                  <textarea
-                    value={editCompanySummary}
-                    onChange={(event) => setEditCompanySummary(event.target.value)}
-                    className="min-h-24 rounded-2xl border border-rose-200/60 bg-white/80 px-4 py-3 text-sm text-rose-900 outline-none transition focus:border-rose-300"
-                  />
-                </label>
+              <label className="grid gap-2 text-sm text-rose-900/70">
+                Summary
+                <textarea
+                  value={editCompanySummary}
+                  onChange={(event) => setEditCompanySummary(event.target.value)}
+                  className="min-h-24 rounded-2xl border border-rose-200/60 bg-white/80 px-4 py-3 text-sm text-rose-900 outline-none transition focus:border-rose-300"
+                />
+              </label>
+              <div className="rounded-[1.5rem] border border-rose-200/60 bg-white/70 p-4">
+                <div className="text-xs uppercase tracking-[0.24em] text-rose-900/55">
+                  Update OAuth app credentials
+                </div>
+                <p className="mt-2 text-xs text-rose-900/60">
+                  Leave fields empty to keep the existing credentials. Provide both values to
+                  rotate a platform&apos;s OAuth app secrets.
+                </p>
+                <div className="mt-4 grid gap-4">
+                  {platforms.map((platform) => {
+                    const meta = platformMeta[platform];
+                    const Icon = meta.icon;
+
+                    return (
+                      <div
+                        key={platform}
+                        className="rounded-2xl border border-rose-200/50 bg-white/60 p-3"
+                      >
+                        <div className="flex items-center gap-2 text-sm text-rose-900/80">
+                          <div className="rounded-xl bg-white/80 p-2 text-rose-700">
+                            <Icon className="h-4 w-4" />
+                          </div>
+                          <div className="font-medium">{meta.label}</div>
+                        </div>
+                        <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                          <input
+                            value={editCompanyOAuthApps[platform].clientId}
+                            onChange={(event) =>
+                              setEditCompanyOAuthApps((prev) => ({
+                                ...prev,
+                                [platform]: {
+                                  ...prev[platform],
+                                  clientId: event.target.value
+                                }
+                              }))
+                            }
+                            className="w-full min-w-0 rounded-2xl border border-rose-200/60 bg-white/80 px-4 py-3 text-xs text-rose-900 outline-none transition focus:border-rose-300"
+                            placeholder="Client ID"
+                          />
+                          <input
+                            type="password"
+                            value={editCompanyOAuthApps[platform].clientSecret}
+                            onChange={(event) =>
+                              setEditCompanyOAuthApps((prev) => ({
+                                ...prev,
+                                [platform]: {
+                                  ...prev[platform],
+                                  clientSecret: event.target.value
+                                }
+                              }))
+                            }
+                            className="w-full min-w-0 rounded-2xl border border-rose-200/60 bg-white/80 px-4 py-3 text-xs text-rose-900 outline-none transition focus:border-rose-300"
+                            placeholder="Client secret"
+                          />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
                 <div className="flex flex-wrap gap-3">
                   <button
                     type="button"
@@ -392,6 +603,15 @@ export function CompanyGrid({ companies, channels }: CompanyGridProps) {
                     className="button-primary inline-flex items-center rounded-full px-5 py-3 text-sm font-medium transition disabled:opacity-60"
                   >
                     Save changes
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleDeleteCompany}
+                    disabled={isPending}
+                    className="button-danger inline-flex items-center rounded-full px-5 py-3 text-sm font-medium transition disabled:opacity-60"
+                  >
+                    <Trash2 className="mr-2 h-4 w-4" />
+                    Delete company
                   </button>
                   <button
                     type="button"

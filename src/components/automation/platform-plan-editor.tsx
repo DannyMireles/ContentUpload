@@ -24,10 +24,11 @@ export function PlatformPlanEditor({
   const isConnected = channel?.status === "connected";
   const statusLabel =
     channel?.status === "connected"
-      ? channel.handle
+      ? "Connected"
       : channel?.status === "expired"
         ? "OAuth expired"
         : "OAuth required";
+  const handleLabel = isConnected ? channel?.handle : null;
 
   return (
     <section
@@ -50,7 +51,7 @@ export function PlatformPlanEditor({
           <div className="flex flex-wrap items-center gap-3">
             <div
               className={cn(
-                "rounded-full border px-3 py-1 text-xs uppercase tracking-[0.22em]",
+                "rounded-full border px-3 py-1 text-[11px] uppercase tracking-[0.22em]",
                 isConnected
                   ? "border-emerald-200 bg-emerald-100/60 text-emerald-900"
                   : channel?.status === "expired"
@@ -60,6 +61,14 @@ export function PlatformPlanEditor({
             >
               {statusLabel}
             </div>
+            {handleLabel ? (
+              <div
+                className="max-w-[180px] truncate text-xs text-rose-900/60"
+                title={handleLabel}
+              >
+                {handleLabel}
+              </div>
+            ) : null}
 
             <label className="inline-flex items-center gap-2 rounded-full border border-rose-200/70 bg-white/70 px-3 py-1 text-xs text-rose-900/80">
               <input

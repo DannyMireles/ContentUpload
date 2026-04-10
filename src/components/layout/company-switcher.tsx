@@ -49,17 +49,18 @@ export function CompanySwitcher({ companies }: CompanySwitcherProps) {
       : companies.find((company) => company.id === currentCompany)?.name ?? "Select company";
 
   return (
-    <div ref={containerRef} className="relative">
+    <div ref={containerRef} className="relative max-w-full">
       <button
         type="button"
         onClick={() => setOpen((prev) => !prev)}
-        className="rounded-full border border-white/70 bg-white/90 px-4 py-2 text-[10px] uppercase tracking-[0.32em] text-rose-900/80 shadow-[0_10px_24px_rgba(130,80,52,0.16)]"
+        className="max-w-[12rem] truncate rounded-full border border-white/70 bg-white/90 px-4 py-2 text-[8px] uppercase tracking-[0.32em] text-rose-900/80 shadow-[0_10px_24px_rgba(130,80,52,0.16)]"
+        title={selectedLabel}
       >
         {selectedLabel}
       </button>
 
       {open ? (
-        <div className="absolute right-0 mt-3 w-56 rounded-[1.25rem] border border-rose-200/60 bg-white/95 p-2 text-sm shadow-[0_18px_40px_rgba(120,72,48,0.18)]">
+        <div className="absolute right-0 mt-3 w-60 max-w-[80vw] rounded-[1.25rem] border border-rose-200/60 bg-white/95 p-2 text-sm shadow-[0_18px_40px_rgba(120,72,48,0.18)]">
           <button
             type="button"
             onClick={() => handleChange("all")}
@@ -83,7 +84,9 @@ export function CompanySwitcher({ companies }: CompanySwitcherProps) {
                     : "text-rose-900/80 hover:bg-white"
                 }`}
               >
-                {company.name}
+                <span className="block truncate" title={company.name}>
+                  {company.name}
+                </span>
               </button>
             ))}
           </div>

@@ -64,11 +64,13 @@ export function ScheduledTaskBoard({ automations }: ScheduledTaskBoardProps) {
 
                 <div className="flex flex-col gap-4">
                   <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
-                    <div>
-                      <div className="text-xs uppercase tracking-[0.24em] text-rose-900/55">
+                    <div className="min-w-0">
+                      <div className="truncate text-xs uppercase tracking-[0.24em] text-rose-900/55" title={automation.companyName}>
                         {automation.companyName}
                       </div>
-                      <h3 className="mt-2 text-2xl text-rose-950">{automation.videoName}</h3>
+                      <h3 className="mt-2 break-words text-2xl text-rose-950">
+                        {automation.videoName}
+                      </h3>
                       <div className="mt-2 flex flex-wrap gap-2">
                         <StatusPill tone={automation.status === "scheduled" ? "success" : "warning"}>
                           {automation.status}
@@ -128,11 +130,13 @@ export function ScheduledTaskBoard({ automations }: ScheduledTaskBoardProps) {
             onClick={(event) => event.stopPropagation()}
           >
             <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-              <div>
-                <div className="text-xs uppercase tracking-[0.24em] text-rose-900/55">
+              <div className="min-w-0">
+                <div className="truncate text-xs uppercase tracking-[0.24em] text-rose-900/55" title={activeAutomation.companyName}>
                   {activeAutomation.companyName}
                 </div>
-                <h3 className="mt-2 text-3xl text-rose-950">{activeAutomation.videoName}</h3>
+                <h3 className="mt-2 break-words text-3xl text-rose-950">
+                  {activeAutomation.videoName}
+                </h3>
                 <div className="mt-2 flex flex-wrap gap-2">
                   <StatusPill tone={activeAutomation.status === "scheduled" ? "success" : "warning"}>
                     {activeAutomation.status}
@@ -192,7 +196,7 @@ export function ScheduledTaskBoard({ automations }: ScheduledTaskBoardProps) {
                       <div className="mt-2 text-xs text-rose-900/60">
                         Scheduled for {plan.scheduledFor ? formatDateTime(plan.scheduledFor) : "Not set"}
                       </div>
-                      <div className="mt-2 text-sm text-rose-900/70">
+                      <div className="mt-2 break-words text-sm text-rose-900/70">
                         {plan.seoMode === "ai"
                           ? plan.generatedSummary ?? "AI metadata queued."
                           : plan.caption || plan.description || "Manual copy not provided."}
@@ -208,7 +212,7 @@ export function ScheduledTaskBoard({ automations }: ScheduledTaskBoardProps) {
                   <Sparkles className="h-4 w-4" />
                   Transcript
                 </div>
-                <div className="mt-3 max-h-48 overflow-y-auto whitespace-pre-wrap">
+                <div className="mt-3 max-h-48 overflow-y-auto whitespace-pre-wrap break-words">
                   {activeAutomation.transcript ?? "Transcript is still processing."}
                 </div>
               </div>

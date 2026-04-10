@@ -8,6 +8,7 @@ import { Link2, LogOut, ShieldCheck, Unplug } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
 import { StatusPill } from "@/components/ui/status-pill";
 import { platformMeta, platformList } from "@/lib/platforms";
+import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import type { ChannelConnection, Company, PendingOAuthLinkSession } from "@/lib/types";
 import { cn, formatDateTime } from "@/lib/utils";
 
@@ -107,6 +108,12 @@ export function OAuthSettingsPanel({
     });
   }
 
+  async function handleLogout() {
+    const supabase = createSupabaseBrowserClient();
+    await supabase.auth.signOut();
+    router.replace("/login");
+  }
+
   return (
     <div className="space-y-6">
       <PageHeader
@@ -124,15 +131,14 @@ export function OAuthSettingsPanel({
               OAuth is the only way to connect channels. Tokens are encrypted in Supabase and isolated per company.
             </p>
           </div>
-          <form action="/api/auth/logout" method="post">
-            <button
-              type="submit"
-              className="button-secondary inline-flex items-center rounded-full px-4 py-2 text-sm transition hover:bg-white"
-            >
-              <LogOut className="mr-2 h-4 w-4" />
-              Log out
-            </button>
-          </form>
+          <button
+            type="button"
+            onClick={handleLogout}
+            className="button-secondary inline-flex items-center rounded-full px-4 py-2 text-sm transition hover:bg-white"
+          >
+            <LogOut className="mr-2 h-4 w-4" />
+            Log out
+          </button>
         </div>
       </div>
 
@@ -181,9 +187,13 @@ export function OAuthSettingsPanel({
                     {(candidate.displayName?.slice(0, 1).toUpperCase() ?? "?")}
                   </div>
                 )}
-                <div>
-                  <div className="font-medium">{candidate.displayName}</div>
-                  <div className="text-xs text-rose-900/60">{candidate.handle}</div>
+                <div className="min-w-0">
+                  <div className="truncate font-medium" title={candidate.displayName}>
+                    {candidate.displayName}
+                  </div>
+                  <div className="truncate text-xs text-rose-900/60" title={candidate.handle}>
+                    {candidate.handle}
+                  </div>
                 </div>
               </button>
             ))}
@@ -209,8 +219,8 @@ export function OAuthSettingsPanel({
               <div className={`h-1.5 rounded-full bg-gradient-to-r ${company.accent}`} />
               <div className="mt-5 flex items-start justify-between gap-4">
                 <div>
-                  <h3 className="text-2xl text-rose-950">{company.name}</h3>
-                  <p className="mt-3 text-sm leading-6 text-rose-900/70">
+                  <h3 className="break-words text-2xl text-rose-950">{company.name}</h3>
+                  <p className="mt-3 break-words text-sm leading-6 text-rose-900/70">
                     {company.summary}
                   </p>
                 </div>
@@ -233,13 +243,16 @@ export function OAuthSettingsPanel({
                       className="rounded-[1.25rem] border border-rose-200/60 bg-white/70 px-4 py-3"
                     >
                       <div className="flex flex-wrap items-center justify-between gap-3">
-                        <div className="flex items-center gap-3">
+                        <div className="flex min-w-0 items-center gap-3">
                           <div className="rounded-2xl bg-white/80 p-2.5 text-rose-700">
                             <Icon className="h-4 w-4" />
                           </div>
-                          <div>
+                          <div className="min-w-0">
                             <div className="font-medium text-rose-950">{meta.label}</div>
-                            <div className="text-xs text-rose-900/68">
+                            <div
+                              className="max-w-[220px] truncate text-xs text-rose-900/68"
+                              title={channel?.handle ?? "No linked account"}
+                            >
                               {channel?.handle ?? "No linked account"}
                             </div>
                           </div>
@@ -254,7 +267,7 @@ export function OAuthSettingsPanel({
                         )}
                       </div>
 
-                      <div className="mt-3 space-y-2 text-xs text-rose-900/70">
+                      <div className="mt-3 space-y-2 break-words text-xs text-rose-900/70">
                         <div>
                           OAuth-only publishing is enforced. This platform cannot be scheduled unless this connection is healthy.
                         </div>
