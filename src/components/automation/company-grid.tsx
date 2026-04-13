@@ -59,7 +59,7 @@ export function CompanyGrid({ companies, channels }: CompanyGridProps) {
   }, [selectedCompany]);
 
   function collectOAuthApps(input: OAuthAppState) {
-    const payload: Record<PlatformId, { clientId: string; clientSecret: string }> = {};
+    const payload: Partial<Record<PlatformId, { clientId: string; clientSecret: string }>> = {};
     const incomplete: PlatformId[] = [];
 
     platforms.forEach((platform) => {

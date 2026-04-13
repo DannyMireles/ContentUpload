@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useState } from "react";
 import { Mail, ShieldCheck } from "lucide-react";
 
+import { LegalLinks } from "@/components/layout/legal-links";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 
 export default function LoginPage() {
@@ -120,6 +121,7 @@ export default function LoginPage() {
               Forgot code?
             </Link>
           </div>
+          <LegalLinks className="mt-4 flex flex-wrap items-center gap-3 text-xs text-rose-900/75" />
         </section>
       </div>
     </main>

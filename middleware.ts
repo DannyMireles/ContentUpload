@@ -23,6 +23,14 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
+  if (PUBLIC_API_PREFIXES.some((prefix) => pathname.startsWith(prefix))) {
+    return NextResponse.next();
+  }
+
+  if (PUBLIC_PATHS.includes(pathname)) {
+    return NextResponse.next();
+  }
+
   const response = NextResponse.next();
 
   const supabase = createServerClient(env.SUPABASE_URL!, env.SUPABASE_ANON_KEY!, {
@@ -39,12 +47,8 @@ export async function middleware(request: NextRequest) {
     }
   });
 
-  const { data } = await supabase.auth.getUser();
-  const user = data.user;
-
-  if (PUBLIC_API_PREFIXES.some((prefix) => pathname.startsWith(prefix))) {
-    return response;
-  }
+  const userResponse = await withTimeout(supabase.auth.getUser(), 4000);
+  const user = userResponse?.data.user ?? null;
 
   const isPublicPath = PUBLIC_PATHS.includes(pathname);
   const isOnboarding = pathname.startsWith(ONBOARDING_PREFIX);
@@ -62,11 +66,16 @@ export async function middleware(request: NextRequest) {
     return response;
   }
 
-  const { data: profile, error } = await supabase
-    .from("user_profiles")
-    .select("approved,onboarding_complete")
-    .eq("user_id", user.id)
-    .maybeSingle();
+  const profileResponse = await withTimeout(
+    supabase
+      .from("user_profiles")
+      .select("approved,onboarding_complete")
+      .eq("user_id", user.id)
+      .maybeSingle(),
+    4000
+  );
+  const profile = profileResponse?.data ?? null;
+  const error = profileResponse?.error ?? null;
 
   if (!profile && !error) {
     await supabase.from("user_profiles").insert({
@@ -100,6 +109,22 @@ export async function middleware(request: NextRequest) {
   }
 
   return response;
+}
+
+async function withTimeout<T>(promise: PromiseLike<T>, ms: number): Promise<T | null> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race<T | null>([
+      promise,
+      new Promise<null>((resolve) => {
+        timer = setTimeout(() => resolve(null), ms);
+      })
+    ]);
+  } finally {
+    if (timer) {
+      clearTimeout(timer);
+    }
+  }
 }
 
 export const config = {

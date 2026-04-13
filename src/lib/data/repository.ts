@@ -96,7 +96,11 @@ interface CompanyOAuthAppRow {
   company_id: string;
   platform: PlatformId;
   client_id: string;
-  encrypted_client_secret: Record<string, string>;
+  encrypted_client_secret: {
+    iv: string;
+    tag: string;
+    value: string;
+  };
 }
 
 type ClientOptions = { useAdmin?: boolean };
